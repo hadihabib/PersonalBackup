@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PersonalBackup"
+rootProject.name = "PBackup"
 include(":app")

@@ -51,6 +51,16 @@ public class BackupService extends Service {
         if (checkSelfPermission(Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED) {
             getContentResolver().registerContentObserver(CallLog.Calls.CONTENT_URI, true, callObserver);
         }
+        executor.execute(() -> {
+            BackupDb db = new BackupDb(getApplicationContext());
+            AutoTxtBackup.ensureFiles(
+                getApplicationContext(),
+                db.exportSmsText(),
+                db.exportCallsText()
+            );
+            db.close();
+        });
+
         syncRecentSms();
         syncRecentCalls();
     }
@@ -69,8 +79,8 @@ public class BackupService extends Service {
         Intent openIntent = new Intent(this, MainActivity.class);
         PendingIntent pi = PendingIntent.getActivity(this, 0, openIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL_ID) : new Notification.Builder(this);
-        return builder.setContentTitle("النسخ الاحتياطي نشط")
-                .setContentText("يتم حفظ الرسائل وسجل المكالمات محليًا")
+        return builder.setContentTitle("PBackup active")
+                .setContentText("Saving SMS and call history locally")
                 .setSmallIcon(android.R.drawable.ic_menu_save)
                 .setOngoing(true)
                 .setContentIntent(pi)
@@ -79,8 +89,8 @@ public class BackupService extends Service {
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "النسخ الاحتياطي", NotificationManager.IMPORTANCE_LOW);
-            channel.setDescription("إشعار مستمر أثناء مراقبة الرسائل وسجل المكالمات");
+            NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "PBackup", NotificationManager.IMPORTANCE_LOW);
+            channel.setDescription("Persistent notification while monitoring SMS and call-log changes");
             getSystemService(NotificationManager.class).createNotificationChannel(channel);
         }
     }
