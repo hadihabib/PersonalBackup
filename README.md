@@ -1,31 +1,41 @@
-# PBackup v3
+# PBackup v4
 
-PBackup keeps a local backup of SMS messages and call history.
+PBackup keeps a local copy of SMS messages and call history.
 
-## Automatic TXT files
+## New in v4
 
-The app now maintains exactly two visible text files:
+The user chooses the backup location from Android's system folder picker.
 
-- `Download/PBackup/messages.txt`
-- `Download/PBackup/calls.txt`
+Inside the selected folder PBackup creates:
 
-New records are **appended to the same files automatically**. The app does not create a new TXT file for every event.
+- `.pbackup/.mstore.dat` — messages
+- `.pbackup/.cstore.dat` — calls
 
-The SQLite database remains the primary local backup. If one of the TXT files is missing when the background service starts, PBackup recreates it from the local database.
+The folder and files use dot-prefixed names so many Android file managers hide them unless
+"Show hidden files" is enabled.
 
-## First run
+New records are appended to the same two files automatically. PBackup also keeps its internal
+SQLite database as a recovery copy.
+
+## First setup
 
 1. Install the APK.
 2. Open PBackup.
-3. Tap **Grant permissions** and allow SMS, Call Log, Phone and Notifications permissions.
-4. Tap **Start automatic backup**.
-5. Keep the `PBackup active` notification enabled.
-6. Optionally tap **Import existing records** once to copy existing SMS and call history into the backup.
+3. Grant SMS / call-log / notification permissions.
+4. Tap **Choose / Change backup location** and select a folder.
+5. Tap **Start automatic backup**.
+6. On Xiaomi / HyperOS / MIUI, enable Autostart and set battery usage to No restrictions.
 
-## Xiaomi / HyperOS / MIUI
+## Changing location later
 
-For reliable background operation, allow Auto-start for PBackup and set Battery Saver to **No restrictions**. Do not Force stop the app.
+Tap **Choose / Change backup location** again. PBackup writes the complete current backup into
+the hidden `.pbackup` folder at the newly selected location and continues there.
 
-## Build APK with GitHub Actions
+## Privacy note
 
-Open the repository on GitHub, go to **Actions → Build Android APK → Run workflow**. After a successful build, download the `PBackup-APK` artifact and install `app-debug.apk`.
+A dot-prefixed folder is only casual hiding, not encryption. A file manager with "Show hidden
+files" enabled can reveal it.
+
+## GitHub APK build
+
+Use **Actions → Build Android APK → Run workflow** and download the `PBackup-APK` artifact.

@@ -24,9 +24,11 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int PERMISSION_REQUEST = 2001;
+    private static final int FOLDER_REQUEST = 2002;
 
     private TextView statusText;
     private TextView countText;
+    private TextView locationText;
     private ExecutorService executor;
 
     @Override
@@ -72,12 +74,23 @@ public class MainActivity extends Activity {
         countText = new TextView(this);
         countText.setTextSize(17);
         countText.setGravity(Gravity.CENTER);
-        countText.setPadding(0, 0, 0, dp(24));
+        countText.setPadding(0, 0, 0, dp(16));
         root.addView(countText, matchWrap());
+
+        locationText = new TextView(this);
+        locationText.setTextSize(15);
+        locationText.setTextColor(Color.DKGRAY);
+        locationText.setGravity(Gravity.START);
+        locationText.setPadding(0, 0, 0, dp(18));
+        root.addView(locationText, matchWrap());
 
         Button permissions = makeButton("Grant permissions");
         permissions.setOnClickListener(v -> requestNeededPermissions());
         root.addView(permissions, buttonLayout());
+
+        Button location = makeButton("Choose / Change backup location");
+        location.setOnClickListener(v -> chooseBackupFolder());
+        root.addView(location, buttonLayout());
 
         Button start = makeButton("Start automatic backup");
         start.setOnClickListener(v -> {
@@ -85,6 +98,13 @@ public class MainActivity extends Activity {
                 requestNeededPermissions();
                 return;
             }
+
+            if (!AutoTxtBackup.hasBackupLocation(this)) {
+                Toast.makeText(this, "Choose a backup location first.", Toast.LENGTH_LONG).show();
+                chooseBackupFolder();
+                return;
+            }
+
             startBackupService();
             refreshStatus();
             Toast.makeText(this, "Automatic backup started", Toast.LENGTH_SHORT).show();
@@ -111,6 +131,13 @@ public class MainActivity extends Activity {
                 BackupDb db = new BackupDb(getApplicationContext());
                 db.importAllSms();
                 db.importAllCalls();
+
+                AutoTxtBackup.ensureFiles(
+                        getApplicationContext(),
+                        db.exportSmsText(),
+                        db.exportCallsText()
+                );
+
                 db.close();
 
                 runOnUiThread(() -> {
@@ -120,13 +147,6 @@ public class MainActivity extends Activity {
             });
         });
         root.addView(importExisting, buttonLayout());
-
-        TextView fileInfo = new TextView(this);
-        fileInfo.setText("\nAutomatic TXT files:\nDownload/PBackup/messages.txt\nDownload/PBackup/calls.txt");
-        fileInfo.setTextSize(15);
-        fileInfo.setTextColor(Color.DKGRAY);
-        fileInfo.setGravity(Gravity.START);
-        root.addView(fileInfo, matchWrap());
 
         Button settings = makeButton("Open app settings");
         settings.setOnClickListener(v -> {
@@ -138,8 +158,9 @@ public class MainActivity extends Activity {
 
         TextView note = new TextView(this);
         note.setText(
-            "\nPBackup keeps two fixed TXT files and appends new records to the same files automatically. " +
-            "Keep the ‘PBackup active’ notification enabled for reliable background monitoring."
+            "\nThe selected folder contains a hidden .pbackup folder with two fixed files. " +
+            "New records are appended automatically to the same files. " +
+            "Hidden folders can still be shown by file managers that have “Show hidden files” enabled."
         );
         note.setTextSize(14);
         note.setTextColor(Color.GRAY);
@@ -148,6 +169,17 @@ public class MainActivity extends Activity {
 
         scroll.addView(root);
         setContentView(scroll);
+    }
+
+    private void chooseBackupFolder() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
+                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION |
+                Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+        );
+        startActivityForResult(intent, FOLDER_REQUEST);
     }
 
     private Button makeButton(String text) {
@@ -160,8 +192,8 @@ public class MainActivity extends Activity {
 
     private LinearLayout.LayoutParams matchWrap() {
         return new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
         );
     }
 
@@ -177,8 +209,8 @@ public class MainActivity extends Activity {
 
     private boolean hasCorePermissions() {
         return checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
-            && checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
-            && checkSelfPermission(Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED;
+                && checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED;
     }
 
     private void requestNeededPermissions() {
@@ -191,10 +223,6 @@ public class MainActivity extends Activity {
 
         if (Build.VERSION.SDK_INT >= 33) {
             addIfMissing(needed, Manifest.permission.POST_NOTIFICATIONS);
-        }
-
-        if (Build.VERSION.SDK_INT <= 28) {
-            addIfMissing(needed, Manifest.permission.WRITE_EXTERNAL_STORAGE);
         }
 
         if (needed.isEmpty()) {
@@ -226,9 +254,25 @@ public class MainActivity extends Activity {
     }
 
     private void refreshStatus() {
-        boolean ok = hasCorePermissions();
-        statusText.setText(ok ? "● Backup ready" : "● Permissions required");
-        statusText.setTextColor(ok ? Color.rgb(20, 120, 55) : Color.rgb(180, 70, 40));
+        boolean permissionsOk = hasCorePermissions();
+        boolean locationOk = AutoTxtBackup.hasBackupLocation(this);
+
+        statusText.setText(
+                permissionsOk && locationOk
+                        ? "● Backup ready"
+                        : (!permissionsOk ? "● Permissions required" : "● Backup location required")
+        );
+
+        statusText.setTextColor(
+                permissionsOk && locationOk
+                        ? Color.rgb(20, 120, 55)
+                        : Color.rgb(180, 70, 40)
+        );
+
+        locationText.setText(
+                "Backup location: " + AutoTxtBackup.locationLabel(this) +
+                "\nHidden data: .pbackup/.mstore.dat + .cstore.dat"
+        );
 
         executor.execute(() -> {
             BackupDb db = new BackupDb(getApplicationContext());
@@ -237,9 +281,43 @@ public class MainActivity extends Activity {
             db.close();
 
             runOnUiThread(() ->
-                countText.setText("Saved messages: " + sms + "\nSaved calls: " + calls)
+                    countText.setText("Saved messages: " + sms + "\nSaved calls: " + calls)
             );
         });
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == FOLDER_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            Uri uri = data.getData();
+
+            executor.execute(() -> {
+                BackupDb db = new BackupDb(getApplicationContext());
+                boolean ok = AutoTxtBackup.setBackupLocation(
+                        getApplicationContext(),
+                        uri,
+                        db.exportSmsText(),
+                        db.exportCallsText()
+                );
+                db.close();
+
+                runOnUiThread(() -> {
+                    refreshStatus();
+                    if (ok) {
+                        if (hasCorePermissions()) startBackupService();
+                        Toast.makeText(this, "Backup location saved", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(
+                                this,
+                                "Could not use this folder. Try another folder.",
+                                Toast.LENGTH_LONG
+                        ).show();
+                    }
+                });
+            });
+        }
     }
 
     @Override
@@ -252,9 +330,9 @@ public class MainActivity extends Activity {
                 Toast.makeText(this, "Automatic backup enabled", Toast.LENGTH_SHORT).show();
             } else {
                 Toast.makeText(
-                    this,
-                    "SMS and call-log permissions are required for backup.",
-                    Toast.LENGTH_LONG
+                        this,
+                        "SMS and call-log permissions are required for backup.",
+                        Toast.LENGTH_LONG
                 ).show();
             }
             refreshStatus();
